@@ -2,7 +2,7 @@ import sys
 import random
 from PyQt5.QtCore import Qt, QTimer, QPoint, QRect
 from PyQt5.QtGui import QPixmap, QTransform, QPainter, QBrush, QColor
-from PyQt5.QtWidgets import QApplication, QLabel, QWidget
+from PyQt5.QtWidgets import QApplication, QLabel, QWidget, QSystemTrayIcon, QMenu, QAction
 
 
 class SpriteAnimator:
@@ -33,20 +33,28 @@ class SpriteAnimator:
 
 
 class Fish(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, scale_factor=1.0, parent=None):
         super().__init__(parent)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        self.scale_factor = scale_factor
+        self.base_size = 32
         
         # Create fish sprite from tileset
         self.fish_pixmap = self.create_fish_sprite()
         self.label = QLabel(self)
         self.label.setPixmap(self.fish_pixmap)
-        self.label.setFixedSize(32, 32)
-        self.resize(32, 32)
+        self.label.setScaledContents(True)
+        self.update_size()
         
         self.old_pos = QPoint(0, 0)
         self.being_dragged = False
+    
+    def update_size(self):
+        scaled_size = int(self.base_size * self.scale_factor)
+        self.label.setFixedSize(scaled_size, scaled_size)
+        self.resize(scaled_size, scaled_size)
         
     def create_fish_sprite(self):
         # Load fish tileset and select random fish
@@ -130,6 +138,9 @@ class VirtualPet(QWidget):
         
         # Fish feeding system
         self.fish = None
+        
+        # Settings
+        self.scale_factor = 1.0
 
         # Frame size and counts
         self.frame_width = 80
@@ -147,10 +158,9 @@ class VirtualPet(QWidget):
         self.current_animator = self.animators['idle_l']
 
         self.label = QLabel(self)
-        self.label.setFixedSize(self.frame_width, self.frame_height)
-        self.label.setScaledContents(False)
+        self.update_size()
+        self.label.setScaledContents(True)
         self.label.setPixmap(self.current_animator.next_frame())
-        self.resize(self.frame_width, self.frame_height)
 
 
         self.move(random.randint(100, 500), random.randint(100, 400))
@@ -179,10 +189,77 @@ class VirtualPet(QWidget):
         self.attention_timer = QTimer()
         self.attention_timer.timeout.connect(self.attention_seek)
         self.attention_timer.start(60000)
+        
+        # System tray
+        self.setup_tray()
 
     def animate(self):
         frame = self.current_animator.next_frame()
         self.label.setPixmap(frame)
+    
+    def update_size(self):
+        scaled_width = int(self.frame_width * self.scale_factor)
+        scaled_height = int(self.frame_height * self.scale_factor)
+        self.label.setFixedSize(scaled_width, scaled_height)
+        self.resize(scaled_width, scaled_height)
+    
+    def setup_tray(self):
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return
+        
+        # Create tray icon using cat sprite
+        tray_icon = self.animators['idle_l'].frames[0].scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.tray_icon = QSystemTrayIcon(tray_icon, self)
+        
+        # Create context menu
+        tray_menu = QMenu()
+        
+        # Scale submenu
+        scale_menu = QMenu("Scale", self)
+        
+        scale_1x = QAction("1x (Normal)", self)
+        scale_1x.setCheckable(True)
+        scale_1x.setChecked(self.scale_factor == 1.0)
+        scale_1x.triggered.connect(lambda: self.set_scale(1.0))
+        scale_menu.addAction(scale_1x)
+        
+        scale_2x = QAction("2x (Large)", self)
+        scale_2x.setCheckable(True)
+        scale_2x.setChecked(self.scale_factor == 2.0)
+        scale_2x.triggered.connect(lambda: self.set_scale(2.0))
+        scale_menu.addAction(scale_2x)
+        
+        self.scale_actions = [scale_1x, scale_2x]
+        
+        tray_menu.addMenu(scale_menu)
+        tray_menu.addSeparator()
+        
+        # Exit action
+        exit_action = QAction("Exit", self)
+        exit_action.triggered.connect(self.close_application)
+        tray_menu.addAction(exit_action)
+        
+        self.tray_icon.setContextMenu(tray_menu)
+        self.tray_icon.show()
+    
+    def set_scale(self, scale):
+        self.scale_factor = scale
+        self.update_size()
+        
+        # Update scale action checkboxes
+        for action in self.scale_actions:
+            action.setChecked(False)
+        
+        if scale == 1.0:
+            self.scale_actions[0].setChecked(True)
+        elif scale == 2.0:
+            self.scale_actions[1].setChecked(True)
+    
+    def close_application(self):
+        if self.fish:
+            self.fish.close()
+        self.tray_icon.hide()
+        QApplication.quit()
 
     def set_animation(self, name):
         self.current_animator = self.animators[name]
@@ -287,11 +364,12 @@ class VirtualPet(QWidget):
     
     def spawn_fish(self):
         if self.fish is None:
-            self.fish = Fish()
+            self.fish = Fish(self.scale_factor)
             # Spawn fish at random location on screen
             screen = QApplication.primaryScreen().geometry()
-            fish_x = random.randint(50, screen.width() - 90)
-            fish_y = random.randint(50, screen.height() - 75)
+            fish_size = int(32 * self.scale_factor)
+            fish_x = random.randint(50, screen.width() - fish_size - 50)
+            fish_y = random.randint(50, screen.height() - fish_size - 50)
             self.fish.move(fish_x, fish_y)
             self.fish.show()
     
