@@ -64,8 +64,8 @@ class VirtualPet(QWidget):
         # Load animators
         self.animators = {
             'idle': SpriteAnimator("assets/IDLE.png", 80, 64, 8),
-            'walk_r': SpriteAnimator("assets/WALK.png", 80, 64, 8),
-            'walk_l': SpriteAnimator("assets/WALK.png", 80, 64, 8, mirrored=True),
+            'walk_r': SpriteAnimator("assets/WALK.png", 80, 64, 8, mirrored=True),
+            'walk_l': SpriteAnimator("assets/WALK.png", 80, 64, 8),
             'meow': SpriteAnimator("assets/ATTACK 1.png", 80, 64, 8),
         }
 
