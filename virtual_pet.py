@@ -50,6 +50,12 @@ class VirtualPet(QWidget):
         self.hunger = 0
         self.is_hungry = False
         self.direction = 1  # 1 = right, -1 = left
+        
+        # Movement state
+        self.is_walking = False
+        self.target_x = 0
+        self.target_y = 0
+        self.walk_speed = 2
 
         # Frame size and counts
         self.frame_width = 80
@@ -86,6 +92,10 @@ class VirtualPet(QWidget):
         self.animation_timer.timeout.connect(self.animate)
         self.animation_timer.start(100)
 
+        self.movement_timer = QTimer()
+        self.movement_timer.timeout.connect(self.update_position)
+        self.movement_timer.start(50)
+
         self.walk_timer = QTimer()
         self.walk_timer.timeout.connect(self.random_walk)
         self.walk_timer.start(15000)
@@ -107,21 +117,54 @@ class VirtualPet(QWidget):
         self.current_animator.reset()
 
     def random_walk(self):
-        if self.is_hungry:
+        if self.is_hungry or self.is_walking:
             return
 
-        new_x = random.randint(0, self.screen_geometry.width() - self.width())
-        new_y = random.randint(0, self.screen_geometry.height() - self.height())
+        self.target_x = random.randint(0, self.screen_geometry.width() - self.width())
+        self.target_y = random.randint(0, self.screen_geometry.height() - self.height())
 
-        if new_x < self.x():
+        if self.target_x < self.x():
             self.direction = -1
             self.set_animation('walk_l')
         else:
             self.direction = 1
             self.set_animation('walk_r')
 
-        self.move(new_x, new_y)
-        QTimer.singleShot(2000, lambda: self.set_animation('idle'))
+        self.is_walking = True
+
+    def update_position(self):
+        if not self.is_walking:
+            return
+
+        current_x = self.x()
+        current_y = self.y()
+        
+        # Calculate distance to target
+        dx = self.target_x - current_x
+        dy = self.target_y - current_y
+        distance = (dx**2 + dy**2)**0.5
+        
+        # If close enough to target, stop walking
+        if distance < self.walk_speed:
+            self.move(self.target_x, self.target_y)
+            self.is_walking = False
+            self.set_animation('idle')
+            return
+        
+        # Move towards target
+        if distance > 0:
+            step_x = (dx / distance) * self.walk_speed
+            step_y = (dy / distance) * self.walk_speed
+            
+            # Update direction if needed
+            if step_x < 0 and self.direction == 1:
+                self.direction = -1
+                self.set_animation('walk_l')
+            elif step_x > 0 and self.direction == -1:
+                self.direction = 1
+                self.set_animation('walk_r')
+            
+            self.move(int(current_x + step_x), int(current_y + step_y))
 
     def increase_hunger(self):
         self.hunger += 1
@@ -146,9 +189,11 @@ class VirtualPet(QWidget):
             QTimer.singleShot(1000, self.walk_back_for_attention)
 
     def walk_back_for_attention(self):
+        self.target_x = self.screen_geometry.width() // 2
+        self.target_y = self.screen_geometry.height() // 2
+        self.direction = 1
         self.set_animation('walk_r')
-        self.move(self.screen_geometry.width() // 2, self.screen_geometry.height() // 2)
-        QTimer.singleShot(2000, lambda: self.set_animation('idle'))
+        self.is_walking = True
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
