@@ -120,8 +120,19 @@ class VirtualPet(QWidget):
         if self.is_hungry or self.is_walking:
             return
 
-        self.target_x = random.randint(0, self.screen_geometry.width() - self.width())
-        self.target_y = random.randint(0, self.screen_geometry.height() - self.height())
+        # Move in smaller steps - within 200 pixels from current position
+        max_distance = 200
+        current_x = self.x()
+        current_y = self.y()
+        
+        # Calculate new position within bounds
+        min_x = max(0, current_x - max_distance)
+        max_x = min(self.screen_geometry.width() - self.width(), current_x + max_distance)
+        min_y = max(0, current_y - max_distance)
+        max_y = min(self.screen_geometry.height() - self.height(), current_y + max_distance)
+        
+        self.target_x = random.randint(min_x, max_x)
+        self.target_y = random.randint(min_y, max_y)
 
         if self.target_x < self.x():
             self.direction = -1
@@ -177,13 +188,16 @@ class VirtualPet(QWidget):
         self.feed_icon.show()
 
     def feed_pet(self, event):
+        if self.is_walking:
+            return
         self.hunger = 0
         self.is_hungry = False
+        self.is_walking = False
         self.feed_icon.hide()
         self.set_animation('idle')
 
     def attention_seek(self):
-        if not self.is_hungry:
+        if not self.is_hungry and not self.is_walking:
             screen = QApplication.primaryScreen().geometry()
             self.move(-self.width(), random.randint(0, screen.height() - self.height()))
             QTimer.singleShot(1000, self.walk_back_for_attention)
