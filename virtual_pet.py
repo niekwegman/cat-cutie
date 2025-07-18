@@ -1,7 +1,7 @@
 import sys
 import random
 from PyQt5.QtCore import Qt, QTimer, QPoint, QRect
-from PyQt5.QtGui import QPixmap, QTransform
+from PyQt5.QtGui import QPixmap, QTransform, QPainter, QBrush, QColor
 from PyQt5.QtWidgets import QApplication, QLabel, QWidget
 
 
@@ -32,6 +32,76 @@ class SpriteAnimator:
         self.current_frame = 0
 
 
+class Fish(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Create fish sprite from tileset
+        self.fish_pixmap = self.create_fish_sprite()
+        self.label = QLabel(self)
+        self.label.setPixmap(self.fish_pixmap)
+        self.label.setFixedSize(32, 32)
+        self.resize(32, 32)
+        
+        self.old_pos = QPoint(0, 0)
+        self.being_dragged = False
+        
+    def create_fish_sprite(self):
+        # Load fish tileset and select random fish
+        try:
+            tileset = QPixmap("assets/fish.png")
+            # Select random fish (0-3) from the 4 fish in the tileset
+            fish_index = random.randint(0, 3)
+            fish_x = fish_index * 32
+            
+            # Extract the specific fish sprite (32x32)
+            fish_sprite = tileset.copy(fish_x, 0, 32, 32)
+            return fish_sprite
+        except:
+            # Fallback to programmatic fish if image fails to load
+            return self.create_fallback_fish()
+    
+    def create_fallback_fish(self):
+        # Create a simple fish sprite programmatically as fallback
+        pixmap = QPixmap(32, 32)
+        pixmap.fill(Qt.transparent)
+        
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Fish body (orange)
+        painter.setBrush(QBrush(QColor(255, 165, 0)))
+        painter.drawEllipse(8, 12, 16, 8)
+        
+        # Fish tail (orange)
+        painter.drawPolygon([QPoint(8, 16), QPoint(2, 12), QPoint(2, 20)])
+        
+        # Fish eye (white with black pupil)
+        painter.setBrush(QBrush(QColor(255, 255, 255)))
+        painter.drawEllipse(18, 14, 3, 3)
+        painter.setBrush(QBrush(QColor(0, 0, 0)))
+        painter.drawEllipse(19, 15, 1, 1)
+        
+        painter.end()
+        return pixmap
+    
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.old_pos = event.globalPos()
+            self.being_dragged = True
+    
+    def mouseMoveEvent(self, event):
+        if self.being_dragged:
+            delta = QPoint(event.globalPos() - self.old_pos)
+            self.move(self.x() + delta.x(), self.y() + delta.y())
+            self.old_pos = event.globalPos()
+    
+    def mouseReleaseEvent(self, event):
+        self.being_dragged = False
+
+
 class VirtualPet(QWidget):
     def __init__(self):
         super().__init__()
@@ -57,6 +127,9 @@ class VirtualPet(QWidget):
         self.target_y = 0
         self.walk_speed = 2
         self.was_offscreen = False
+        
+        # Fish feeding system
+        self.fish = None
 
         # Frame size and counts
         self.frame_width = 80
@@ -79,13 +152,6 @@ class VirtualPet(QWidget):
         self.label.setPixmap(self.current_animator.next_frame())
         self.resize(self.frame_width, self.frame_height)
 
-        # Feed icon (reuse a frame from meow animation)
-        self.feed_icon = QLabel(self)
-        self.feed_icon.setFixedSize(self.frame_width, self.frame_height)
-        self.feed_icon.setPixmap(self.animators['meow'].frames[0])
-        self.feed_icon.move(40, 0)
-        self.feed_icon.hide()
-        self.feed_icon.mousePressEvent = self.feed_pet
 
         self.move(random.randint(100, 500), random.randint(100, 400))
 
@@ -97,6 +163,10 @@ class VirtualPet(QWidget):
         self.movement_timer = QTimer()
         self.movement_timer.timeout.connect(self.update_position)
         self.movement_timer.start(50)
+        
+        self.fish_check_timer = QTimer()
+        self.fish_check_timer.timeout.connect(self.check_fish_collision)
+        self.fish_check_timer.start(100)
 
         self.walk_timer = QTimer()
         self.walk_timer.timeout.connect(self.random_walk)
@@ -199,19 +269,40 @@ class VirtualPet(QWidget):
     def get_hungry(self):
         self.is_hungry = True
         self.set_animation('meow')
-        self.feed_icon.show()
+        self.spawn_fish()
 
-    def feed_pet(self, event):
+    def feed_pet(self):
         if self.is_walking:
             return
         self.hunger = 0
         self.is_hungry = False
         self.is_walking = False
-        self.feed_icon.hide()
+        if self.fish:
+            self.fish.close()
+            self.fish = None
         if self.direction == 1:
             self.set_animation('idle_r')
         else:
             self.set_animation('idle_l')
+    
+    def spawn_fish(self):
+        if self.fish is None:
+            self.fish = Fish()
+            # Spawn fish at random location on screen
+            screen = QApplication.primaryScreen().geometry()
+            fish_x = random.randint(50, screen.width() - 90)
+            fish_y = random.randint(50, screen.height() - 75)
+            self.fish.move(fish_x, fish_y)
+            self.fish.show()
+    
+    def check_fish_collision(self):
+        if self.fish and self.is_hungry:
+            # Check if fish is close enough to cat
+            fish_rect = QRect(self.fish.x(), self.fish.y(), self.fish.width(), self.fish.height())
+            cat_rect = QRect(self.x(), self.y(), self.width(), self.height())
+            
+            if fish_rect.intersects(cat_rect):
+                self.feed_pet()
 
     def attention_seek(self):
         if not self.is_hungry and not self.is_walking and self.was_offscreen:
