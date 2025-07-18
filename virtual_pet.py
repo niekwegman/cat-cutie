@@ -56,6 +56,7 @@ class VirtualPet(QWidget):
         self.target_x = 0
         self.target_y = 0
         self.walk_speed = 2
+        self.was_offscreen = False
 
         # Frame size and counts
         self.frame_width = 80
@@ -63,13 +64,14 @@ class VirtualPet(QWidget):
 
         # Load animators
         self.animators = {
-            'idle': SpriteAnimator("assets/IDLE.png", 80, 64, 8),
+            'idle_l': SpriteAnimator("assets/IDLE.png", 80, 64, 8),
+            'idle_r': SpriteAnimator("assets/IDLE.png", 80, 64, 8, mirrored=True),
             'walk_r': SpriteAnimator("assets/WALK.png", 80, 64, 8, mirrored=True),
             'walk_l': SpriteAnimator("assets/WALK.png", 80, 64, 8),
             'meow': SpriteAnimator("assets/ATTACK 1.png", 80, 64, 8),
         }
 
-        self.current_animator = self.animators['idle']
+        self.current_animator = self.animators['idle_l']
 
         self.label = QLabel(self)
         self.label.setFixedSize(self.frame_width, self.frame_height)
@@ -120,6 +122,10 @@ class VirtualPet(QWidget):
         if self.is_hungry or self.is_walking:
             return
 
+        # Only walk 30% of the time
+        if random.random() > 0.3:
+            return
+
         # Move in smaller steps - within 200 pixels from current position
         max_distance = 200
         current_x = self.x()
@@ -150,6 +156,11 @@ class VirtualPet(QWidget):
         current_x = self.x()
         current_y = self.y()
         
+        # Check if cat is offscreen
+        if (current_x < -self.width() or current_x > self.screen_geometry.width() or 
+            current_y < -self.height() or current_y > self.screen_geometry.height()):
+            self.was_offscreen = True
+        
         # Calculate distance to target
         dx = self.target_x - current_x
         dy = self.target_y - current_y
@@ -159,7 +170,10 @@ class VirtualPet(QWidget):
         if distance < self.walk_speed:
             self.move(self.target_x, self.target_y)
             self.is_walking = False
-            self.set_animation('idle')
+            if self.direction == 1:
+                self.set_animation('idle_r')
+            else:
+                self.set_animation('idle_l')
             return
         
         # Move towards target
@@ -194,12 +208,16 @@ class VirtualPet(QWidget):
         self.is_hungry = False
         self.is_walking = False
         self.feed_icon.hide()
-        self.set_animation('idle')
+        if self.direction == 1:
+            self.set_animation('idle_r')
+        else:
+            self.set_animation('idle_l')
 
     def attention_seek(self):
-        if not self.is_hungry and not self.is_walking:
+        if not self.is_hungry and not self.is_walking and self.was_offscreen:
             screen = QApplication.primaryScreen().geometry()
             self.move(-self.width(), random.randint(0, screen.height() - self.height()))
+            self.was_offscreen = False
             QTimer.singleShot(1000, self.walk_back_for_attention)
 
     def walk_back_for_attention(self):
