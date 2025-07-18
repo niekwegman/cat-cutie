@@ -134,6 +134,8 @@ class VirtualPet(QWidget):
         self.target_x = 0
         self.target_y = 0
         self.walk_speed = 2
+        self.run_speed = 4
+        self.current_speed = 2
         self.was_offscreen = False
         
         # Fish feeding system
@@ -152,6 +154,8 @@ class VirtualPet(QWidget):
             'idle_r': SpriteAnimator("assets/IDLE.png", 80, 64, 8, mirrored=True),
             'walk_r': SpriteAnimator("assets/WALK.png", 80, 64, 8, mirrored=True),
             'walk_l': SpriteAnimator("assets/WALK.png", 80, 64, 8),
+            'run_r': SpriteAnimator("assets/RUN.png", 80, 64, 8, mirrored=True),
+            'run_l': SpriteAnimator("assets/RUN.png", 80, 64, 8),
             'meow': SpriteAnimator("assets/ATTACK 1.png", 80, 64, 8),
         }
 
@@ -274,8 +278,12 @@ class VirtualPet(QWidget):
         if random.random() > 0.3:
             return
 
-        # Move in smaller steps - within 200 pixels from current position
-        max_distance = 200
+        # Sometimes choose longer distances (30% chance)
+        if random.random() < 0.3:
+            max_distance = 400  # Longer distance for running
+        else:
+            max_distance = 200  # Normal distance for walking
+            
         current_x = self.x()
         current_y = self.y()
         
@@ -288,12 +296,28 @@ class VirtualPet(QWidget):
         self.target_x = random.randint(min_x, max_x)
         self.target_y = random.randint(min_y, max_y)
 
-        if self.target_x < self.x():
-            self.direction = -1
-            self.set_animation('walk_l')
+        # Calculate distance to determine if we should walk or run
+        dx = self.target_x - current_x
+        dy = self.target_y - current_y
+        distance = (dx**2 + dy**2)**0.5
+        
+        # Use running animation and speed for longer distances
+        if distance > 250:
+            self.current_speed = self.run_speed
+            if self.target_x < self.x():
+                self.direction = -1
+                self.set_animation('run_l')
+            else:
+                self.direction = 1
+                self.set_animation('run_r')
         else:
-            self.direction = 1
-            self.set_animation('walk_r')
+            self.current_speed = self.walk_speed
+            if self.target_x < self.x():
+                self.direction = -1
+                self.set_animation('walk_l')
+            else:
+                self.direction = 1
+                self.set_animation('walk_r')
 
         self.is_walking = True
 
@@ -315,27 +339,37 @@ class VirtualPet(QWidget):
         distance = (dx**2 + dy**2)**0.5
         
         # If close enough to target, stop walking
-        if distance < self.walk_speed:
+        if distance < self.current_speed:
             self.move(self.target_x, self.target_y)
             self.is_walking = False
-            if self.direction == 1:
-                self.set_animation('idle_r')
-            else:
-                self.set_animation('idle_l')
+            # Don't change animation if cat is hungry (should keep meowing)
+            if not self.is_hungry:
+                if self.direction == 1:
+                    self.set_animation('idle_r')
+                else:
+                    self.set_animation('idle_l')
             return
         
         # Move towards target
         if distance > 0:
-            step_x = (dx / distance) * self.walk_speed
-            step_y = (dy / distance) * self.walk_speed
+            step_x = (dx / distance) * self.current_speed
+            step_y = (dy / distance) * self.current_speed
             
-            # Update direction if needed
+            # Update direction and animation if needed
             if step_x < 0 and self.direction == 1:
                 self.direction = -1
-                self.set_animation('walk_l')
+                # Choose appropriate animation based on current speed
+                if self.current_speed == self.run_speed:
+                    self.set_animation('run_l')
+                else:
+                    self.set_animation('walk_l')
             elif step_x > 0 and self.direction == -1:
                 self.direction = 1
-                self.set_animation('walk_r')
+                # Choose appropriate animation based on current speed
+                if self.current_speed == self.run_speed:
+                    self.set_animation('run_r')
+                else:
+                    self.set_animation('walk_r')
             
             self.move(int(current_x + step_x), int(current_y + step_y))
 
