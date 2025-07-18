@@ -1,7 +1,7 @@
 import sys
 import random
 from PyQt5.QtCore import Qt, QTimer, QPoint, QRect
-from PyQt5.QtGui import QPixmap, QTransform, QPainter, QBrush, QColor
+from PyQt5.QtGui import QPixmap, QTransform, QPainter, QBrush, QColor, QIcon
 from PyQt5.QtWidgets import QApplication, QLabel, QWidget, QSystemTrayIcon, QMenu, QAction
 
 
@@ -208,7 +208,8 @@ class VirtualPet(QWidget):
             return
         
         # Create tray icon using cat sprite
-        tray_icon = self.animators['idle_l'].frames[0].scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        tray_pixmap = self.animators['idle_l'].frames[0].scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        tray_icon = QIcon(tray_pixmap)
         self.tray_icon = QSystemTrayIcon(tray_icon, self)
         
         # Create context menu
